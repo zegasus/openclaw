@@ -67,6 +67,71 @@ If you want a heartbeat to do something very specific (e.g. “check Gmail PubSu
 stats” or “verify gateway health”), set `agents.defaults.heartbeat.prompt` (or
 `agents.list[].heartbeat.prompt`) to a custom body (sent verbatim).
 
+## How heartbeat messages are generated
+
+Every heartbeat turn calls the LLM with a user message built from three parts,
+in this order:
+
+1. **Base prompt** — one of:
+   - If a cron `systemEvent` is pending: a relay prompt wrapping the event text
+     (see [Cron-triggered heartbeats](#cron-triggered-heartbeats) below).
+   - If an async exec completed: a relay prompt for the exec result.
+   - Otherwise: the configured `heartbeat.prompt` (default: "Read HEARTBEAT.md…").
+2. **Workspace path hint** — when the base prompt references `HEARTBEAT.md`,
+   OpenClaw appends the exact file path so the model reads the right file.
+3. **Current time** — appended as `Current time: <formatted> (<timezone>) / <UTC>`.
+   The model uses this when composing timestamp-based notifications.
+
+The model's response becomes the notification delivered to your channel
+(unless it contains only `HEARTBEAT_OK`, which is silently discarded).
+
+### Notification format from HEARTBEAT.md
+
+If your `HEARTBEAT.md` includes formatting instructions — for example telling
+the model to start each response with a header like
+`⏰ Heartbeat triggered at {current_time}` and then list open tasks — the model
+will follow those instructions on every heartbeat run. The timestamp in the
+notification comes from the `Current time:` line injected into the prompt.
+
+### Cron-triggered heartbeats
+
+A cron job with `payload.kind = "systemEvent"` enqueues its text as a pending
+system event. When the next heartbeat fires it picks up this event and builds a
+relay prompt:
+
+```
+A scheduled reminder has been triggered. The reminder content is:
+
+<event text>
+
+Please relay this reminder to the user in a helpful and friendly way.
+```
+
+The event text may include the `{time}` template variable. OpenClaw expands it
+with the formatted trigger time and timezone before building the relay prompt,
+so the notification text is deterministic and does not depend on the model
+inferring the time from context.
+
+Example cron event text with `{time}`:
+
+```
+⏰ Heartbeat triggered at {time}
+
+Please execute the check logic in HEARTBEAT.md:
+- subagents list
+- review deliverables
+- update progress
+- start next task if needed
+- send status to #dcp
+```
+
+When this event fires, `{time}` is replaced with the current formatted time
+(e.g. `Monday, March 10th, 2026 — 7:14 AM (Asia/Shanghai)`) before the relay
+prompt is sent to the model.
+
+> **Tip:** to include timestamps in cron notifications reliably, use `{time}` in
+> your cron event text rather than relying on the model to add them.
+
 ## Response contract
 
 - If nothing needs attention, reply with **`HEARTBEAT_OK`**.

@@ -5,7 +5,7 @@ import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
-import { appendCronStyleCurrentTimeLine } from "../agents/current-time.js";
+import { appendCronStyleCurrentTimeLine, expandCronEventTextTime } from "../agents/current-time.js";
 import { resolveEffectiveMessagesConfig } from "../agents/identity.js";
 import { DEFAULT_HEARTBEAT_FILENAME } from "../agents/workspace.js";
 import { resolveHeartbeatReplyPayload } from "../auto-reply/heartbeat-reply-payload.js";
@@ -578,18 +578,22 @@ function resolveHeartbeatRunPrompt(params: {
   preflight: HeartbeatPreflight;
   canRelayToUser: boolean;
   workspaceDir: string;
+  nowMs?: number;
 }): HeartbeatPromptResolution {
   const pendingEventEntries = params.preflight.pendingEventEntries;
   const pendingEvents = params.preflight.shouldInspectPendingEvents
     ? pendingEventEntries.map((event) => event.text)
     : [];
+  const nowMs = params.nowMs ?? Date.now();
   const cronEvents = pendingEventEntries
     .filter(
       (event) =>
         (params.preflight.isCronEventReason || event.contextKey?.startsWith("cron:")) &&
         isCronSystemEvent(event.text),
     )
-    .map((event) => event.text);
+    // Expand {time} template variables so reminder text can include the trigger timestamp
+    // without relying on the model to infer it from the injected "Current time:" context line.
+    .map((event) => expandCronEventTextTime(event.text, params.cfg, nowMs));
   const hasExecCompletion = pendingEvents.some(isExecCompletionEvent);
   const hasCronEvents = cronEvents.length > 0;
   const basePrompt = hasExecCompletion
@@ -689,6 +693,7 @@ export async function runHeartbeatOnce(opts: {
     preflight,
     canRelayToUser,
     workspaceDir,
+    nowMs: startedAt,
   });
   const ctx = {
     Body: appendCronStyleCurrentTimeLine(prompt, cfg, startedAt),
