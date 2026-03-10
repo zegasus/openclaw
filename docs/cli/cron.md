@@ -16,6 +16,32 @@ Related:
 
 Tip: run `openclaw cron --help` for the full command surface.
 
+## Listing and inspecting jobs
+
+To see what cron jobs are currently set up, run:
+
+```bash
+openclaw cron list          # enabled jobs only
+openclaw cron list --all    # include disabled jobs
+openclaw cron list --json   # machine-readable JSON
+```
+
+To check the scheduler state (running, next wake time, job counts):
+
+```bash
+openclaw cron status
+```
+
+For run history of a specific job:
+
+```bash
+openclaw cron runs --id <job-id>
+```
+
+Jobs are also persisted on disk at `~/.openclaw/cron/jobs.json`. Manual edits
+are only safe when the Gateway is stopped — prefer the CLI commands above for
+changes while the Gateway is running.
+
 Note: isolated `cron add` jobs default to `--announce` delivery. Use `--no-deliver` to keep
 output internal. `--deliver` remains as a deprecated alias for `--announce`.
 
