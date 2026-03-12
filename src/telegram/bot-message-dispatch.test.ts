@@ -92,8 +92,8 @@ describe("dispatchTelegramMessage draft streaming", () => {
       groupHistories: new Map(),
       route: { agentId: "default", accountId: "default" },
       skillFilter: undefined,
-      sendTyping: vi.fn(),
-      sendRecordVoice: vi.fn(),
+      sendTyping: vi.fn().mockResolvedValue(undefined),
+      sendRecordVoice: vi.fn().mockResolvedValue(undefined),
       ackReactionPromise: null,
       reactionApi: null,
       removeAckAfterReply: false,
@@ -1859,5 +1859,33 @@ describe("dispatchTelegramMessage draft streaming", () => {
 
     expect(draftA.clear).toHaveBeenCalledTimes(1);
     expect(draftB.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends typing indicator eagerly before dispatch begins", async () => {
+    const callOrder: string[] = [];
+    const sendTyping = vi.fn().mockImplementation(async () => {
+      callOrder.push("sendTyping");
+    });
+    dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async () => {
+      callOrder.push("dispatchReplyWithBufferedBlockDispatcher");
+      return { queuedFinal: true };
+    });
+
+    const context = createContext({ sendTyping });
+    await dispatchWithContext({ context });
+
+    expect(sendTyping).toHaveBeenCalledTimes(1);
+    expect(callOrder.indexOf("sendTyping")).toBeLessThan(
+      callOrder.indexOf("dispatchReplyWithBufferedBlockDispatcher"),
+    );
+  });
+
+  it("does not throw when eager typing indicator fails", async () => {
+    const sendTyping = vi.fn().mockRejectedValue(new Error("sendChatAction 403: Forbidden"));
+    dispatchReplyWithBufferedBlockDispatcher.mockResolvedValue({ queuedFinal: true });
+
+    const context = createContext({ sendTyping });
+    await expect(dispatchWithContext({ context })).resolves.toBeUndefined();
+    expect(sendTyping).toHaveBeenCalledTimes(1);
   });
 });

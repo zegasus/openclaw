@@ -162,6 +162,12 @@ export const dispatchTelegramMessage = async ({
     statusReactionController,
   } = context;
 
+  // Send typing indicator immediately so the user sees "..." as soon as their
+  // authorized message is received, before model dispatch setup completes.
+  void Promise.resolve(sendTyping()).catch((err) => {
+    logVerbose(`telegram: eager typing cue failed for ${chatId}: ${String(err)}`);
+  });
+
   const draftMaxChars = Math.min(textLimit, 4096);
   const tableMode = resolveMarkdownTableMode({
     cfg,
